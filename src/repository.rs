@@ -299,4 +299,125 @@ impl AccessRecordRepository {
             .await?;
         Ok(result.rows_affected() > 0)
     }
+
+    pub async fn get_hourly_stats(
+        pool: &DbPool,
+        query: &HourlyStatsQuery,
+    ) -> Result<(String, String, Vec<HourlyStatsItem>), AppError> {
+        use chrono::{Duration, Utc};
+
+        let end_date = query
+            .end_date
+            .as_ref()
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| Utc::now().format("%Y-%m-%d").to_string());
+        let start_date = query
+            .start_date
+            .as_ref()
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| {
+                (Utc::now() - Duration::days(6))
+                    .format("%Y-%m-%d")
+                    .to_string()
+            });
+
+        let mut conditions: Vec<String> = vec!["access_result = 'allowed'".to_string()];
+        conditions.push("date(swiped_at) >= date(?)".to_string());
+        conditions.push("date(swiped_at) <= date(?)".to_string());
+
+        let mut params: Vec<String> = vec![start_date.clone(), end_date.clone()];
+
+        if let Some(person_type) = &query.person_type {
+            conditions.push("person_type = ?".to_string());
+            params.push(person_type.clone());
+        }
+        if let Some(door_no) = &query.door_no {
+            conditions.push("door_no = ?".to_string());
+            params.push(door_no.clone());
+        }
+
+        let where_clause = format!("WHERE {}", conditions.join(" AND "));
+
+        let sql = format!(
+            "SELECT
+                strftime('%Y-%m-%d %H:00', swiped_at) as hour,
+                cast(strftime('%H', swiped_at) as integer) as hour_of_day,
+                direction,
+                person_type,
+                COUNT(*) as count
+             FROM access_records
+             {}
+             GROUP BY strftime('%Y-%m-%d %H:00', swiped_at), hour_of_day, direction, person_type
+             ORDER BY hour ASC, direction ASC, person_type ASC",
+            where_clause
+        );
+
+        let mut data_query = sqlx::query_as::<_, HourlyStatsItem>(&sql);
+        for p in &params {
+            data_query = data_query.bind(p);
+        }
+        let items = data_query.fetch_all(pool).await?;
+
+        Ok((start_date, end_date, items))
+    }
+
+    pub async fn get_daily_stats(
+        pool: &DbPool,
+        query: &DailyStatsQuery,
+    ) -> Result<(String, String, Vec<DailyStatsItem>), AppError> {
+        use chrono::{Duration, Utc};
+
+        let end_date = query
+            .end_date
+            .as_ref()
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| Utc::now().format("%Y-%m-%d").to_string());
+        let start_date = query
+            .start_date
+            .as_ref()
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| {
+                (Utc::now() - Duration::days(29))
+                    .format("%Y-%m-%d")
+                    .to_string()
+            });
+
+        let mut conditions: Vec<String> = vec!["access_result = 'allowed'".to_string()];
+        conditions.push("date(swiped_at) >= date(?)".to_string());
+        conditions.push("date(swiped_at) <= date(?)".to_string());
+
+        let mut params: Vec<String> = vec![start_date.clone(), end_date.clone()];
+
+        if let Some(person_type) = &query.person_type {
+            conditions.push("person_type = ?".to_string());
+            params.push(person_type.clone());
+        }
+        if let Some(door_no) = &query.door_no {
+            conditions.push("door_no = ?".to_string());
+            params.push(door_no.clone());
+        }
+
+        let where_clause = format!("WHERE {}", conditions.join(" AND "));
+
+        let sql = format!(
+            "SELECT
+                date(swiped_at) as date,
+                direction,
+                person_type,
+                COUNT(*) as count
+             FROM access_records
+             {}
+             GROUP BY date(swiped_at), direction, person_type
+             ORDER BY date ASC, direction ASC, person_type ASC",
+            where_clause
+        );
+
+        let mut data_query = sqlx::query_as::<_, DailyStatsItem>(&sql);
+        for p in &params {
+            data_query = data_query.bind(p);
+        }
+        let items = data_query.fetch_all(pool).await?;
+
+        Ok((start_date, end_date, items))
+    }
 }

@@ -183,3 +183,19 @@ pub async fn get_stats(
         }
     }))))
 }
+
+pub async fn get_hourly_stats(
+    State(state): State<AppState>,
+    Query(query): Query<HourlyStatsQuery>,
+) -> Result<impl IntoResponse, AppError> {
+    let resp = StatsService::get_hourly_stats(&state.pool, query).await?;
+    Ok(Json(ApiResponse::success(resp)))
+}
+
+pub async fn get_daily_stats(
+    State(state): State<AppState>,
+    Query(query): Query<DailyStatsQuery>,
+) -> Result<impl IntoResponse, AppError> {
+    let resp = StatsService::get_daily_stats(&state.pool, query).await?;
+    Ok(Json(ApiResponse::success(resp)))
+}

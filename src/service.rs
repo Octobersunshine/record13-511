@@ -291,3 +291,200 @@ impl VisitorService {
             .ok_or_else(|| AppError::NotFound(format!("访客(id={})不存在", id)))
     }
 }
+
+pub struct StatsService;
+
+impl StatsService {
+    pub async fn get_hourly_stats(
+        pool: &DbPool,
+        query: HourlyStatsQuery,
+    ) -> Result<HourlyStatsResponse, AppError> {
+        let (start_date, end_date, raw_items) =
+            AccessRecordRepository::get_hourly_stats(pool, &query).await?;
+
+        let mut aggregated: std::collections::HashMap<String, HourlyStatsAggregated> =
+            std::collections::HashMap::new();
+
+        let mut summary = FlowSummary::default();
+        let mut hourly_totals: std::collections::HashMap<String, i64> =
+            std::collections::HashMap::new();
+
+        for item in &raw_items {
+            let entry = aggregated.entry(item.hour.clone()).or_insert(HourlyStatsAggregated {
+                hour: item.hour.clone(),
+                hour_of_day: item.hour_of_day,
+                in_count: 0,
+                out_count: 0,
+                employee_in: 0,
+                employee_out: 0,
+                visitor_in: 0,
+                visitor_out: 0,
+                unknown_in: 0,
+                unknown_out: 0,
+                net_flow: 0,
+            });
+
+            let count = item.count;
+            let is_in = item.direction == "in";
+
+            if is_in {
+                entry.in_count += count;
+                summary.total_in += count;
+            } else {
+                entry.out_count += count;
+                summary.total_out += count;
+            }
+
+            match item.person_type.as_str() {
+                "employee" => {
+                    if is_in {
+                        entry.employee_in += count;
+                    } else {
+                        entry.employee_out += count;
+                    }
+                    summary.employee_total += count;
+                }
+                "visitor" => {
+                    if is_in {
+                        entry.visitor_in += count;
+                    } else {
+                        entry.visitor_out += count;
+                    }
+                    summary.visitor_total += count;
+                }
+                _ => {
+                    if is_in {
+                        entry.unknown_in += count;
+                    } else {
+                        entry.unknown_out += count;
+                    }
+                    summary.unknown_total += count;
+                }
+            }
+
+            *hourly_totals.entry(item.hour.clone()).or_insert(0) += count;
+        }
+
+        for entry in aggregated.values_mut() {
+            entry.net_flow = entry.in_count - entry.out_count;
+        }
+
+        summary.net_flow = summary.total_in - summary.total_out;
+
+        if let Some((peak_hour, peak_count)) = hourly_totals
+            .into_iter()
+            .max_by_key(|&(_, count)| count)
+        {
+            summary.peak_hour = Some(peak_hour);
+            summary.peak_hour_count = peak_count;
+        }
+
+        let mut items: Vec<HourlyStatsAggregated> = aggregated.into_values().collect();
+        items.sort_by(|a, b| a.hour.cmp(&b.hour));
+
+        Ok(HourlyStatsResponse {
+            start_date,
+            end_date,
+            items,
+            summary,
+        })
+    }
+
+    pub async fn get_daily_stats(
+        pool: &DbPool,
+        query: DailyStatsQuery,
+    ) -> Result<DailyStatsResponse, AppError> {
+        let (start_date, end_date, raw_items) =
+            AccessRecordRepository::get_daily_stats(pool, &query).await?;
+
+        let mut aggregated: std::collections::HashMap<String, DailyStatsAggregated> =
+            std::collections::HashMap::new();
+
+        let mut summary = FlowSummary::default();
+        let mut daily_totals: std::collections::HashMap<String, i64> =
+            std::collections::HashMap::new();
+
+        for item in &raw_items {
+            let entry = aggregated.entry(item.date.clone()).or_insert(DailyStatsAggregated {
+                date: item.date.clone(),
+                in_count: 0,
+                out_count: 0,
+                employee_in: 0,
+                employee_out: 0,
+                visitor_in: 0,
+                visitor_out: 0,
+                unknown_in: 0,
+                unknown_out: 0,
+                net_flow: 0,
+            });
+
+            let count = item.count;
+            let is_in = item.direction == "in";
+
+            if is_in {
+                entry.in_count += count;
+                summary.total_in += count;
+            } else {
+                entry.out_count += count;
+                summary.total_out += count;
+            }
+
+            match item.person_type.as_str() {
+                "employee" => {
+                    if is_in {
+                        entry.employee_in += count;
+                    } else {
+                        entry.employee_out += count;
+                    }
+                    summary.employee_total += count;
+                }
+                "visitor" => {
+                    if is_in {
+                        entry.visitor_in += count;
+                    } else {
+                        entry.visitor_out += count;
+                    }
+                    summary.visitor_total += count;
+                }
+                _ => {
+                    if is_in {
+                        entry.unknown_in += count;
+                    } else {
+                        entry.unknown_out += count;
+                    }
+                    summary.unknown_total += count;
+                }
+            }
+
+            *daily_totals.entry(item.date.clone()).or_insert(0) += count;
+        }
+
+        for entry in aggregated.values_mut() {
+            entry.net_flow = entry.in_count - entry.out_count;
+        }
+
+        summary.net_flow = summary.total_in - summary.total_out;
+
+        if let Some((peak_date, peak_count)) = daily_totals
+            .into_iter()
+            .max_by_key(|&(_, count)| count)
+        {
+            summary.peak_date = Some(peak_date);
+            summary.peak_date_count = peak_count;
+        }
+
+        let mut items: Vec<DailyStatsAggregated> = aggregated.into_values().collect();
+        items.sort_by(|a, b| a.date.cmp(&b.date));
+
+        if let Some(max_item) = items.iter().max_by_key(|item| item.in_count + item.out_count) {
+            summary.peak_hour_count = max_item.in_count + max_item.out_count;
+        }
+
+        Ok(DailyStatsResponse {
+            start_date,
+            end_date,
+            items,
+            summary,
+        })
+    }
+}

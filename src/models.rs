@@ -266,3 +266,95 @@ impl From<anyhow::Error> for AppError {
         AppError::Internal(e.to_string())
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HourlyStatsQuery {
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+    pub person_type: Option<String>,
+    pub door_no: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct HourlyStatsItem {
+    pub hour: String,
+    pub hour_of_day: i32,
+    pub direction: String,
+    pub person_type: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HourlyStatsResponse {
+    pub start_date: String,
+    pub end_date: String,
+    pub items: Vec<HourlyStatsAggregated>,
+    pub summary: FlowSummary,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HourlyStatsAggregated {
+    pub hour: String,
+    pub hour_of_day: i32,
+    pub in_count: i64,
+    pub out_count: i64,
+    pub employee_in: i64,
+    pub employee_out: i64,
+    pub visitor_in: i64,
+    pub visitor_out: i64,
+    pub unknown_in: i64,
+    pub unknown_out: i64,
+    pub net_flow: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DailyStatsQuery {
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+    pub person_type: Option<String>,
+    pub door_no: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct DailyStatsItem {
+    pub date: String,
+    pub direction: String,
+    pub person_type: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DailyStatsResponse {
+    pub start_date: String,
+    pub end_date: String,
+    pub items: Vec<DailyStatsAggregated>,
+    pub summary: FlowSummary,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DailyStatsAggregated {
+    pub date: String,
+    pub in_count: i64,
+    pub out_count: i64,
+    pub employee_in: i64,
+    pub employee_out: i64,
+    pub visitor_in: i64,
+    pub visitor_out: i64,
+    pub unknown_in: i64,
+    pub unknown_out: i64,
+    pub net_flow: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct FlowSummary {
+    pub total_in: i64,
+    pub total_out: i64,
+    pub net_flow: i64,
+    pub employee_total: i64,
+    pub visitor_total: i64,
+    pub unknown_total: i64,
+    pub peak_hour: Option<String>,
+    pub peak_hour_count: i64,
+    pub peak_date: Option<String>,
+    pub peak_date_count: i64,
+}

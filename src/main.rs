@@ -47,6 +47,8 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/stats", get(get_stats))
+        .route("/stats/hourly", get(get_hourly_stats))
+        .route("/stats/daily", get(get_daily_stats))
         .route("/access/swipe", post(swipe_card))
         .route("/access/records", get(query_access_records))
         .route("/access/records/:id", get(get_access_record).delete(delete_access_record))
@@ -69,6 +71,8 @@ async fn main() -> anyhow::Result<()> {
     info!("  POST   /visitors               - 新增访客");
     info!("  GET    /visitors/:id           - 访客详情");
     info!("  GET    /stats                  - 统计概览");
+    info!("  GET    /stats/hourly           - 分时进出人流量统计");
+    info!("  GET    /stats/daily            - 分日进出人流量统计");
     info!("  GET    /health                 - 健康检查");
 
     let listener = tokio::net::TcpListener::bind(server_addr).await?;
