@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
+pub const DEFAULT_DEDUP_WINDOW_SECONDS: i64 = 5;
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Employee {
     pub id: i64,
@@ -147,6 +149,7 @@ pub struct SwipeCardResponse {
     pub deny_reason: Option<String>,
     pub swiped_at: String,
     pub message: String,
+    pub is_duplicate: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

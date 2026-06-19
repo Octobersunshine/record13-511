@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Duration, NaiveDateTime, Utc};
 
 use crate::models::*;
 use crate::repository::*;
@@ -24,10 +24,46 @@ impl AccessControlService {
             None => Utc::now().to_rfc3339(),
         };
 
-        let record_no = generate_record_no();
-
         let (person_type, person_id, person_name, department, access_result, deny_reason, message) =
             Self::authenticate_card(pool, &req.card_no, &swiped_at).await?;
+
+        let window_start = {
+            let dt = parse_datetime(&swiped_at);
+            let window_start_dt = dt - Duration::seconds(DEFAULT_DEDUP_WINDOW_SECONDS);
+            window_start_dt.to_rfc3339()
+        };
+
+        if let Some(existing) = AccessRecordRepository::find_latest_within_window(
+            pool,
+            &req.card_no,
+            direction.as_str(),
+            &req.door_no,
+            &window_start,
+        ).await? {
+            tracing::info!(
+                "重复刷卡已去重 - 卡号: {}, 门号: {}, 方向: {}, 原记录: {}, 原时间: {}",
+                req.card_no,
+                req.door_no,
+                direction.as_str(),
+                existing.record_no,
+                existing.swiped_at
+            );
+
+            return Ok(SwipeCardResponse {
+                success: access_result == AccessResult::Allowed,
+                record_no: existing.record_no.clone(),
+                access_result: AccessResult::from_str(&existing.access_result),
+                person_type: PersonType::from_str(&existing.person_type),
+                person_name: existing.person_name.clone(),
+                department: existing.department.clone(),
+                deny_reason: existing.deny_reason.clone(),
+                swiped_at: existing.swiped_at.clone(),
+                message: format!("【重复刷卡】{}（首次通行时间：{}）", message, existing.swiped_at),
+                is_duplicate: true,
+            });
+        }
+
+        let record_no = generate_record_no();
 
         let access_record = AccessRecord {
             id: 0,
@@ -66,6 +102,7 @@ impl AccessControlService {
             deny_reason,
             swiped_at,
             message,
+            is_duplicate: false,
         })
     }
 

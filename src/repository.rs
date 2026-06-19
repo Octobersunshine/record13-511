@@ -195,6 +195,28 @@ impl AccessRecordRepository {
         Ok(record)
     }
 
+    pub async fn find_latest_within_window(
+        pool: &DbPool,
+        card_no: &str,
+        direction: &str,
+        door_no: &str,
+        from_time: &str,
+    ) -> Result<Option<AccessRecord>, AppError> {
+        let record = sqlx::query_as::<_, AccessRecord>(
+            "SELECT * FROM access_records
+             WHERE card_no = ? AND direction = ? AND door_no = ? AND swiped_at >= ?
+             ORDER BY swiped_at DESC
+             LIMIT 1"
+        )
+        .bind(card_no)
+        .bind(direction)
+        .bind(door_no)
+        .bind(from_time)
+        .fetch_optional(pool)
+        .await?;
+        Ok(record)
+    }
+
     pub async fn query(
         pool: &DbPool,
         query: &AccessRecordQuery,
